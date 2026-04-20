@@ -1,7 +1,7 @@
 const int _kstOffsetMinutes = 9 * 60;
 
 final RegExp _apiIsoPattern = RegExp(
-  r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?(Z|[+-]\d{2}(?::?\d{2})?)?$',
+  r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}(?::?\d{2})?)?$',
 );
 final RegExp _datetimeLocalPattern = RegExp(
   r'^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$',
@@ -62,12 +62,29 @@ DateTime _parseApiIsoAsKstWallClock(String iso) {
   final hour = int.parse(match.group(4)!);
   final minute = int.parse(match.group(5)!);
   final second = int.tryParse(match.group(6) ?? '') ?? 0;
-  final fraction = (match.group(7) ?? '').padRight(6, '0');
-  final microseconds = fraction.isEmpty ? 0 : int.parse(fraction);
+  final rawFraction = match.group(7) ?? '';
+  final fraction = rawFraction.padRight(6, '0');
+  final microseconds = rawFraction.isEmpty
+      ? 0
+      : int.parse(fraction.substring(0, 6));
   final milliseconds = microseconds ~/ 1000;
   final remainingMicroseconds = microseconds % 1000;
-  final offsetMinutes = _parseOffsetMinutes(match.group(8));
+  final offsetToken = match.group(8);
 
+  if (_isKstOffset(offsetToken)) {
+    return DateTime(
+      year,
+      month,
+      day,
+      hour,
+      minute,
+      second,
+      milliseconds,
+      remainingMicroseconds,
+    );
+  }
+
+  final offsetMinutes = _parseOffsetMinutes(offsetToken);
   final utcDateTime = DateTime.utc(
     year,
     month,
@@ -80,6 +97,11 @@ DateTime _parseApiIsoAsKstWallClock(String iso) {
   ).subtract(Duration(minutes: offsetMinutes));
 
   return utcDateTime.add(const Duration(minutes: _kstOffsetMinutes));
+}
+
+bool _isKstOffset(String? offsetToken) {
+  if (offsetToken == null || offsetToken.isEmpty) return true;
+  return _parseOffsetMinutes(offsetToken) == _kstOffsetMinutes;
 }
 
 int _parseOffsetMinutes(String? offsetToken) {
