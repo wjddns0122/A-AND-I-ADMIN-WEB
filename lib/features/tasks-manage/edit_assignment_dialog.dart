@@ -10,6 +10,7 @@ import 'package:highlight/languages/kotlin.dart';
 import 'package:highlight/languages/python.dart';
 import 'package:highlight/languages/json.dart';
 
+import '../../core/utils/kst_datetime.dart';
 import 'task_management.dart';
 
 // ─── 디자인 토큰 (AssignmentsView와 동일하게 유지) ──────────────────────────────────
@@ -86,8 +87,8 @@ class _EditAssignmentDialogState extends ConsumerState<_EditAssignmentDialog> {
   late String _difficulty;
   late String _title;
   late String _description;
-  late DateTime? _startAt;
-  late DateTime? _endAt;
+  late String _startAt;
+  late String _endAt;
   late String _status;
 
   late List<String> _learningGoals;
@@ -109,8 +110,8 @@ class _EditAssignmentDialogState extends ConsumerState<_EditAssignmentDialog> {
     _difficulty = a.metadata.difficulty;
     _title = a.metadata.title;
     _description = a.metadata.description ?? '';
-    _startAt = DateTime.tryParse(a.startAt);
-    _endAt = DateTime.tryParse(a.endAt);
+    _startAt = apiIsoToDatetimeLocalKst(a.startAt);
+    _endAt = apiIsoToDatetimeLocalKst(a.endAt);
     _status = a.status;
 
     _learningGoals = List<String>.from(
@@ -261,8 +262,8 @@ class _EditAssignmentDialogState extends ConsumerState<_EditAssignmentDialog> {
                                 _DateTimePickerField(
                                   initialValue: _startAt,
                                   placeholder: '시작일시 선택',
-                                  onChanged: (dt) =>
-                                      setState(() => _startAt = dt),
+                                  onChanged: (value) =>
+                                      setState(() => _startAt = value),
                                 ),
                               ),
                             ),
@@ -273,8 +274,8 @@ class _EditAssignmentDialogState extends ConsumerState<_EditAssignmentDialog> {
                                 _DateTimePickerField(
                                   initialValue: _endAt,
                                   placeholder: '종료일시 선택',
-                                  onChanged: (dt) =>
-                                      setState(() => _endAt = dt),
+                                  onChanged: (value) =>
+                                      setState(() => _endAt = value),
                                 ),
                               ),
                             ),
@@ -904,7 +905,7 @@ class _EditAssignmentDialogState extends ConsumerState<_EditAssignmentDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     _formKey.currentState?.save();
 
-    if (_startAt == null || _endAt == null) return;
+    if (_startAt.trim().isEmpty || _endAt.trim().isEmpty) return;
 
     final reqList = _requirements
         .where((e) => e.trim().isNotEmpty)
@@ -954,8 +955,8 @@ class _EditAssignmentDialogState extends ConsumerState<_EditAssignmentDialog> {
             request: UpdateAssignmentRequest(
               orderInWeek: _orderInWeek,
               status: _status,
-              startAt: _startAt!.toUtc().toIso8601String(),
-              endAt: _endAt!.toUtc().toIso8601String(),
+              startAt: datetimeLocalKstToApiIso(_startAt),
+              endAt: datetimeLocalKstToApiIso(_endAt),
               metadata: AssignmentMetadata(
                 title: _title,
                 description: _description,
@@ -1302,11 +1303,11 @@ class _SmallOutlineButton extends StatelessWidget {
 }
 
 class _DateTimePickerField extends StatefulWidget {
-  final DateTime? initialValue;
+  final String initialValue;
   final String placeholder;
-  final ValueChanged<DateTime> onChanged;
+  final ValueChanged<String> onChanged;
   const _DateTimePickerField({
-    this.initialValue,
+    required this.initialValue,
     required this.placeholder,
     required this.onChanged,
   });
@@ -1321,11 +1322,21 @@ class _DateTimePickerFieldState extends State<_DateTimePickerField> {
   @override
   void initState() {
     super.initState();
-    _ctrl = TextEditingController(
-      text: widget.initialValue != null
-          ? '${widget.initialValue!.year}-${widget.initialValue!.month.toString().padLeft(2, '0')}-${widget.initialValue!.day.toString().padLeft(2, '0')} ${widget.initialValue!.hour.toString().padLeft(2, '0')}:${widget.initialValue!.minute.toString().padLeft(2, '0')}'
-          : '',
-    );
+    _ctrl = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DateTimePickerField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialValue != widget.initialValue) {
+      _ctrl.text = widget.initialValue;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -1334,18 +1345,17 @@ class _DateTimePickerFieldState extends State<_DateTimePickerField> {
       controller: _ctrl,
       readOnly: true,
       onTap: () async {
+        final current = tryParseDatetimeLocalKst(_ctrl.text) ?? DateTime.now();
         final date = await showDatePicker(
           context: context,
-          initialDate: widget.initialValue ?? DateTime.now(),
+          initialDate: current,
           firstDate: DateTime(2020),
           lastDate: DateTime(2101),
         );
         if (date == null || !context.mounted) return;
         final time = await showTimePicker(
           context: context,
-          initialTime: TimeOfDay.fromDateTime(
-            widget.initialValue ?? DateTime.now(),
-          ),
+          initialTime: TimeOfDay.fromDateTime(current),
         );
         if (time == null || !context.mounted) return;
         final dt = DateTime(
@@ -1355,9 +1365,9 @@ class _DateTimePickerFieldState extends State<_DateTimePickerField> {
           time.hour,
           time.minute,
         );
-        _ctrl.text =
-            '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-        widget.onChanged(dt);
+        final formatted = formatDatetimeLocalKst(dt);
+        _ctrl.text = formatted;
+        widget.onChanged(formatted);
       },
       decoration: _inputDeco(widget.placeholder).copyWith(
         prefixIcon: const Icon(

@@ -7,6 +7,8 @@ import 'package:highlight/languages/dart.dart';
 import 'package:highlight/languages/kotlin.dart';
 import 'package:highlight/languages/python.dart';
 
+import '../../core/utils/kst_datetime.dart';
+
 // ─── 디자인 토큰 (EditAssignmentDialog와 일치시킴) ──────────────────────────────────
 class _D {
   static const bg = Color(0xFFFFFFFF);
@@ -146,12 +148,12 @@ class _AssignmentDetailsDialog extends ConsumerWidget {
                         children: [
                           _InfoItem(
                             label: '시작 일시',
-                            value: _pruneOffset(assignment.startAt),
+                            value: apiIsoToDisplayKst(assignment.startAt),
                           ),
                           const SizedBox(width: 48),
                           _InfoItem(
                             label: '종료 일시',
-                            value: _pruneOffset(assignment.endAt),
+                            value: apiIsoToDisplayKst(assignment.endAt),
                           ),
                         ],
                       ),
@@ -626,17 +628,6 @@ class _CodeTemplateViewCardState extends State<_CodeTemplateViewCard> {
     if (l == 'PYTHON') return python;
     return dart;
   }
-}
-
-String _pruneOffset(String dtStr) {
-  return dtStr
-      .replaceAll('T', ' ')
-      .split('.')
-      .first
-      .split('+')
-      .first
-      .split('Z')
-      .first;
 }
 
 class _MetadataBadge extends StatelessWidget {

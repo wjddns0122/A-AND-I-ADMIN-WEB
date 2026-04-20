@@ -10,6 +10,7 @@ import 'package:highlight/languages/kotlin.dart';
 import 'package:highlight/languages/python.dart';
 import 'package:highlight/languages/json.dart';
 
+import '../../../core/utils/kst_datetime.dart';
 import '../task_management.dart';
 import '../edit_assignment_dialog.dart';
 import '../assignment_details_dialog.dart';
@@ -76,8 +77,8 @@ class _AssignmentsViewState extends ConsumerState<AssignmentsView> {
   String _difficulty = 'LOW';
   String _title = '';
   String _description = '';
-  DateTime? _startAt;
-  DateTime? _endAt;
+  String _startAt = '';
+  String _endAt = '';
 
   // 학습 목표 / 요구사항
   final List<String> _learningGoals = [''];
@@ -350,8 +351,9 @@ class _AssignmentsViewState extends ConsumerState<AssignmentsView> {
                   child: _buildLabeledField(
                     '시작 일시',
                     _DateTimePickerField(
+                      initialValue: _startAt,
                       placeholder: '시작일시 (달력에서 선택)',
-                      onChanged: (dt) => setState(() => _startAt = dt),
+                      onChanged: (value) => setState(() => _startAt = value),
                     ),
                   ),
                 ),
@@ -360,8 +362,9 @@ class _AssignmentsViewState extends ConsumerState<AssignmentsView> {
                   child: _buildLabeledField(
                     '종료 일시',
                     _DateTimePickerField(
+                      initialValue: _endAt,
                       placeholder: '종료일시 (달력에서 선택)',
-                      onChanged: (dt) => setState(() => _endAt = dt),
+                      onChanged: (value) => setState(() => _endAt = value),
                     ),
                   ),
                 ),
@@ -1191,7 +1194,7 @@ class _AssignmentsViewState extends ConsumerState<AssignmentsView> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     _formKey.currentState?.save();
 
-    if (_startAt == null || _endAt == null) {
+    if (_startAt.trim().isEmpty || _endAt.trim().isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('시작일시와 종료일시를 입력해주세요.')));
@@ -1245,8 +1248,8 @@ class _AssignmentsViewState extends ConsumerState<AssignmentsView> {
             request: CreateAssignmentRequest(
               weekNo: _weekNo,
               orderInWeek: _orderInWeek,
-              startAt: _startAt!.toUtc().toIso8601String(),
-              endAt: _endAt!.toUtc().toIso8601String(),
+              startAt: datetimeLocalKstToApiIso(_startAt),
+              endAt: datetimeLocalKstToApiIso(_endAt),
               metadata: AssignmentMetadata(
                 title: _title,
                 description: _description,
@@ -1355,7 +1358,7 @@ class _AssignmentCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '난이도: ${assignment.metadata.difficulty}  |  기한: ${assignment.startAt.split('T').first} ~ ${assignment.endAt.split('T').first}',
+                  '난이도: ${assignment.metadata.difficulty}  |  기한: ${apiIsoToDisplayKst(assignment.startAt)} ~ ${apiIsoToDisplayKst(assignment.endAt)}',
                   style: const TextStyle(fontSize: 13, color: _D.textSub),
                 ),
               ],
@@ -1583,9 +1586,11 @@ class _CardTextButton extends StatelessWidget {
 
 // ─── 날짜+시간 피커 ───────────────────────────────────────────────────────────
 class _DateTimePickerField extends StatefulWidget {
+  final String initialValue;
   final String placeholder;
-  final ValueChanged<DateTime> onChanged;
+  final ValueChanged<String> onChanged;
   const _DateTimePickerField({
+    required this.initialValue,
     required this.placeholder,
     required this.onChanged,
   });
@@ -1595,7 +1600,21 @@ class _DateTimePickerField extends StatefulWidget {
 }
 
 class _DateTimePickerFieldState extends State<_DateTimePickerField> {
-  final _ctrl = TextEditingController();
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DateTimePickerField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialValue != widget.initialValue) {
+      _ctrl.text = widget.initialValue;
+    }
+  }
 
   @override
   void dispose() {
@@ -1609,16 +1628,17 @@ class _DateTimePickerFieldState extends State<_DateTimePickerField> {
       controller: _ctrl,
       readOnly: true,
       onTap: () async {
+        final current = tryParseDatetimeLocalKst(_ctrl.text) ?? DateTime.now();
         final date = await showDatePicker(
           context: context,
-          initialDate: DateTime.now(),
+          initialDate: current,
           firstDate: DateTime(2020),
           lastDate: DateTime(2101),
         );
         if (date == null || !context.mounted) return;
         final time = await showTimePicker(
           context: context,
-          initialTime: TimeOfDay.now(),
+          initialTime: TimeOfDay.fromDateTime(current),
         );
         if (time == null || !context.mounted) return;
         final dt = DateTime(
@@ -1628,9 +1648,9 @@ class _DateTimePickerFieldState extends State<_DateTimePickerField> {
           time.hour,
           time.minute,
         );
-        _ctrl.text =
-            '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-        widget.onChanged(dt);
+        final formatted = formatDatetimeLocalKst(dt);
+        _ctrl.text = formatted;
+        widget.onChanged(formatted);
       },
       decoration: _inputDeco(widget.placeholder).copyWith(
         prefixIcon: const Icon(
