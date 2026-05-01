@@ -64,10 +64,13 @@ final class AuthRepositoryImpl implements AuthRepository {
   Future<void> logout() async {
     final current = await _tokenStore.read();
     final refreshToken = current?.refreshToken;
-    if (refreshToken != null && refreshToken.isNotEmpty) {
-      await _apiClient.logout(LogoutRequestDto(refreshToken: refreshToken));
+    try {
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _apiClient.logout(LogoutRequestDto(refreshToken: refreshToken));
+      }
+    } finally {
+      await _tokenStore.clear();
     }
-    await _tokenStore.clear();
   }
 
   @override

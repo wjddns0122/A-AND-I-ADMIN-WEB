@@ -323,12 +323,10 @@ class TasksManagementBloc extends _$TasksManagementBloc {
         assignmentId: assignmentId,
       );
 
-      if (state.selectedCourse?.slug == courseSlug) {
-        state = state.copyWith(
-          selectedAssignment: assignment,
-          isLoadingDetails: false,
-        );
-      }
+      state = state.copyWith(
+        selectedAssignment: assignment,
+        isLoadingDetails: false,
+      );
     } catch (e) {
       unawaited(showApiAlertIfPresent(e));
       String errorMessage = '과제 상세 정보를 불러오는데 실패했습니다: $e';

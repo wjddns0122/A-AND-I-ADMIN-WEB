@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aandi_course_api/aandi_course_api.dart';
+import 'package:go_router/go_router.dart';
 
 import 'task_management.dart';
 import 'views/enrollments_view.dart';
@@ -34,26 +35,23 @@ class _D {
 
 // ─── 진입 함수 ──────────────────────────────────────────────────────────────────
 void showCourseDetailsDialog(BuildContext context, CourseSummary course) {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => _CourseDetailsDialog(course: course),
-  );
+  context.go('/dashboard/courses/${Uri.encodeComponent(course.slug)}');
 }
 
-// ─── 다이얼로그 ─────────────────────────────────────────────────────────────────
-class _CourseDetailsDialog extends ConsumerStatefulWidget {
-  final CourseSummary course;
-  const _CourseDetailsDialog({required this.course});
+// ─── 상세 페이지 ────────────────────────────────────────────────────────────────
+class CourseDetailsPage extends ConsumerStatefulWidget {
+  final String courseSlug;
+
+  const CourseDetailsPage({super.key, required this.courseSlug});
 
   @override
-  ConsumerState<_CourseDetailsDialog> createState() =>
-      _CourseDetailsDialogState();
+  ConsumerState<CourseDetailsPage> createState() => _CourseDetailsPageState();
 }
 
-class _CourseDetailsDialogState extends ConsumerState<_CourseDetailsDialog>
+class _CourseDetailsPageState extends ConsumerState<CourseDetailsPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  String? _selectionRequestedFor;
 
   @override
   void initState() {
@@ -68,13 +66,22 @@ class _CourseDetailsDialogState extends ConsumerState<_CourseDetailsDialog>
   }
 
   @override
+  void didUpdateWidget(covariant CourseDetailsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.courseSlug != widget.courseSlug) {
+      _selectionRequestedFor = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(tasksManagementBlocProvider);
+    final course = _findCourse(state, widget.courseSlug);
 
     ref.listen(tasksManagementBlocProvider, (prev, next) {
       if (prev?.isDeleting == true && next.isDeleting == false) {
         if (next.errorMessage == null) {
-          Navigator.of(context).pop();
+          context.go('/dashboard');
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(const SnackBar(content: Text('코스가 정상적으로 삭제되었습니다.')));
@@ -97,49 +104,109 @@ class _CourseDetailsDialogState extends ConsumerState<_CourseDetailsDialog>
       }
     });
 
-    return Dialog(
-      backgroundColor: _D.bg,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
-      child: SizedBox(
-        width: 1100,
-        height: MediaQuery.of(context).size.height * 0.88,
-        child: Column(
-          children: [
-            // ── 헤더 ──────────────────────────────────────────────────────────
-            _DialogHeader(
-              course: widget.course,
-              tabController: _tabController,
-              isDeleting: state.isDeleting,
-              onEditPressed: () => _showEditCourseDialog(context, ref),
-              onDeletePressed: () => _showDeleteDialog(context, ref),
-              onClose: () => Navigator.of(context).pop(),
+    if (course == null) {
+      return _buildCourseLoadingOrMissing(state);
+    }
+
+    _ensureCourseSelected(course, state);
+
+    return Container(
+      color: _D.bg,
+      child: Column(
+        children: [
+          _DialogHeader(
+            course: course,
+            tabController: _tabController,
+            isDeleting: state.isDeleting,
+            onEditPressed: () => _showEditCourseDialog(context, ref, course),
+            onDeletePressed: () => _showDeleteDialog(context, ref, course),
+            onClose: () => context.go('/dashboard'),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                EnrollmentsView(
+                  courseSlug: course.slug,
+                  isLoading: state.isLoadingDetails,
+                  enrollments: state.selectedCourseEnrollments,
+                ),
+                AssignmentsView(
+                  course: course,
+                  isLoading: state.isLoadingDetails,
+                  assignments: state.selectedCourseAssignments,
+                ),
+                SubmissionStatusesView(
+                  course: course,
+                  isLoadingAssignments: state.isLoadingDetails,
+                  assignments: state.selectedCourseAssignments,
+                  statuses: state.selectedAssignmentSubmissionStatuses,
+                  isLoadingStatuses: state.isLoadingSubmissionStatuses,
+                  errorMessage: state.errorMessage,
+                ),
+              ],
             ),
-            // ── 탭 콘텐츠 ─────────────────────────────────────────────────────
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  EnrollmentsView(
-                    courseSlug: widget.course.slug,
-                    isLoading: state.isLoadingDetails,
-                    enrollments: state.selectedCourseEnrollments,
-                  ),
-                  AssignmentsView(
-                    course: widget.course,
-                    isLoading: state.isLoadingDetails,
-                    assignments: state.selectedCourseAssignments,
-                  ),
-                  SubmissionStatusesView(
-                    course: widget.course,
-                    isLoadingAssignments: state.isLoadingDetails,
-                    assignments: state.selectedCourseAssignments,
-                    statuses: state.selectedAssignmentSubmissionStatuses,
-                    isLoadingStatuses: state.isLoadingSubmissionStatuses,
-                    errorMessage: state.errorMessage,
-                  ),
-                ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  CourseSummary? _findCourse(TasksManagementState state, String courseSlug) {
+    if (state.selectedCourse?.slug == courseSlug) {
+      return state.selectedCourse;
+    }
+
+    for (final course in state.courses) {
+      if (course.slug == courseSlug) {
+        return course;
+      }
+    }
+    return null;
+  }
+
+  void _ensureCourseSelected(CourseSummary course, TasksManagementState state) {
+    if (state.selectedCourse?.slug == course.slug ||
+        _selectionRequestedFor == course.slug) {
+      return;
+    }
+
+    _selectionRequestedFor = course.slug;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(tasksManagementBlocProvider.notifier)
+          .add(TasksManagementCourseSelected(course));
+    });
+  }
+
+  Widget _buildCourseLoadingOrMissing(TasksManagementState state) {
+    if (state.status == TasksManagementStatus.initial ||
+        state.status == TasksManagementStatus.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_off_rounded, size: 42, color: _D.textLight),
+            const SizedBox(height: 12),
+            Text(
+              '코스를 찾을 수 없습니다: ${widget.courseSlug}',
+              style: const TextStyle(
+                color: _D.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
               ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => context.go('/dashboard'),
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('과제 관리로 돌아가기'),
             ),
           ],
         ),
@@ -147,7 +214,11 @@ class _CourseDetailsDialogState extends ConsumerState<_CourseDetailsDialog>
     );
   }
 
-  void _showDeleteDialog(BuildContext context, WidgetRef ref) {
+  void _showDeleteDialog(
+    BuildContext context,
+    WidgetRef ref,
+    CourseSummary course,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -172,7 +243,7 @@ class _CourseDetailsDialogState extends ConsumerState<_CourseDetailsDialog>
                   .read(tasksManagementBlocProvider.notifier)
                   .add(
                     TasksManagementCourseDeletedRequested(
-                      courseSlug: widget.course.slug,
+                      courseSlug: course.slug,
                     ),
                   );
             },
@@ -183,15 +254,19 @@ class _CourseDetailsDialogState extends ConsumerState<_CourseDetailsDialog>
     );
   }
 
-  void _showEditCourseDialog(BuildContext context, WidgetRef ref) {
+  void _showEditCourseDialog(
+    BuildContext context,
+    WidgetRef ref,
+    CourseSummary course,
+  ) {
     final formKey = GlobalKey<FormState>();
-    String title = widget.course.metadata.title;
-    String description = widget.course.metadata.description ?? '';
-    String phase = widget.course.metadata.phase;
-    String fieldTag = widget.course.targetTrack;
-    String status = widget.course.status;
-    String startDate = widget.course.startDate ?? '';
-    String endDate = widget.course.endDate ?? '';
+    String title = course.metadata.title;
+    String description = course.metadata.description ?? '';
+    String phase = course.metadata.phase;
+    String fieldTag = course.targetTrack;
+    String status = course.status;
+    String startDate = course.startDate ?? '';
+    String endDate = course.endDate ?? '';
 
     showDialog(
       context: context,
@@ -351,7 +426,7 @@ class _CourseDetailsDialogState extends ConsumerState<_CourseDetailsDialog>
                       .read(tasksManagementBlocProvider.notifier)
                       .add(
                         TasksManagementUpdateCourseRequested(
-                          courseSlug: widget.course.slug,
+                          courseSlug: course.slug,
                           request: UpdateCourseRequest(
                             fieldTag: fieldTag,
                             startDate: startDate,

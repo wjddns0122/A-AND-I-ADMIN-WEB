@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:aandi_auth/aandi_auth.dart';
 
 import 'app/api_error_feedback.dart';
 import 'features/dashboard/dashboard_page.dart';
+import 'features/dashboard/dashboard_nav_view_model.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/login/login_page.dart';
+import 'features/tasks-manage/assignment_form_page.dart';
+import 'features/tasks-manage/course_details_dialog.dart';
 
 class AdminApp extends ConsumerStatefulWidget {
   const AdminApp({super.key});
@@ -15,7 +19,6 @@ class AdminApp extends ConsumerStatefulWidget {
 }
 
 class _AdminAppState extends ConsumerState<AdminApp> {
-  static const bool _bypassAuthForDashboard = false;
   late final GoRouter _router;
 
   @override
@@ -24,13 +27,11 @@ class _AdminAppState extends ConsumerState<AdminApp> {
     _router = GoRouter(
       navigatorKey: appNavigatorKey,
       initialLocation: '/dashboard',
-      redirect: (context, state) {
-        if (_bypassAuthForDashboard) {
-          return null;
-        }
-
-        final isLoggedIn = ref.read(authBlocProvider).isAuthenticated;
+      redirect: (context, state) async {
         final isLoginRoute = state.matchedLocation == '/login';
+        final isLoggedIn =
+            ref.read(authBlocProvider).isAuthenticated ||
+            await _hasStoredAccessToken();
 
         if (!isLoggedIn && !isLoginRoute) {
           return '/login';
@@ -42,9 +43,37 @@ class _AdminAppState extends ConsumerState<AdminApp> {
       },
       routes: [
         GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
-        GoRoute(
-          path: '/dashboard',
-          builder: (context, state) => const DashboardPage(),
+        ShellRoute(
+          builder: (context, state, child) => DashboardShellPage(
+            selectedTab: _selectedTabForPath(state.uri.path),
+            child: child,
+          ),
+          routes: [
+            GoRoute(
+              path: '/dashboard',
+              builder: (context, state) => const DashboardPage(),
+            ),
+            GoRoute(
+              path: '/dashboard/courses/:courseSlug',
+              builder: (context, state) => CourseDetailsPage(
+                courseSlug: state.pathParameters['courseSlug']!,
+              ),
+            ),
+            GoRoute(
+              path: '/dashboard/courses/:courseSlug/assignments/new',
+              builder: (context, state) => AssignmentFormPage.create(
+                courseSlug: state.pathParameters['courseSlug']!,
+              ),
+            ),
+            GoRoute(
+              path:
+                  '/dashboard/courses/:courseSlug/assignments/:assignmentId/edit',
+              builder: (context, state) => AssignmentFormPage.edit(
+                courseSlug: state.pathParameters['courseSlug']!,
+                assignmentId: state.pathParameters['assignmentId']!,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -67,4 +96,16 @@ class _AdminAppState extends ConsumerState<AdminApp> {
       routerConfig: _router,
     );
   }
+
+  Future<bool> _hasStoredAccessToken() async {
+    final tokens = await ref.read(tokenStoreProvider).read();
+    return tokens?.accessToken.isNotEmpty ?? false;
+  }
+}
+
+DashboardNavTab? _selectedTabForPath(String path) {
+  if (path.startsWith('/dashboard/courses')) {
+    return DashboardNavTab.tasksManage;
+  }
+  return null;
 }

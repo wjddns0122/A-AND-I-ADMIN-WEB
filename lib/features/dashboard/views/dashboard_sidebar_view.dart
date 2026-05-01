@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../auth/presentation/bloc/auth_bloc.dart';
-import '../../auth/presentation/bloc/auth_event.dart';
+import '../../auth/presentation/logout_action.dart';
 import '../dashboard_nav_view_model.dart';
 
 class DashboardSidebarView extends ConsumerWidget {
-  const DashboardSidebarView({super.key});
+  const DashboardSidebarView({super.key, this.selectedTab});
+
+  final DashboardNavTab? selectedTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedTab = ref.watch(dashboardNavViewModelProvider);
+    final currentTab = selectedTab ?? ref.watch(dashboardNavViewModelProvider);
+
+    void closeDrawerIfOpen() {
+      final scaffold = Scaffold.maybeOf(context);
+      if (scaffold?.isDrawerOpen ?? false) {
+        Navigator.of(context).pop();
+      }
+    }
 
     return Container(
       width: double.infinity,
@@ -56,34 +65,37 @@ class DashboardSidebarView extends ConsumerWidget {
           DashboardSidebarItemView(
             icon: Icons.group_rounded,
             label: '사용자 관리',
-            selected: selectedTab == DashboardNavTab.usersManage,
+            selected: currentTab == DashboardNavTab.usersManage,
             onTap: () {
               ref
                   .read(dashboardNavViewModelProvider.notifier)
                   .selectTab(DashboardNavTab.usersManage);
-              Navigator.maybePop(context);
+              closeDrawerIfOpen();
+              context.go('/dashboard');
             },
           ),
           DashboardSidebarItemView(
             icon: Icons.add_task_rounded,
             label: '과제 추가',
-            selected: selectedTab == DashboardNavTab.tasksManage,
+            selected: currentTab == DashboardNavTab.tasksManage,
             onTap: () {
               ref
                   .read(dashboardNavViewModelProvider.notifier)
                   .selectTab(DashboardNavTab.tasksManage);
-              Navigator.maybePop(context);
+              closeDrawerIfOpen();
+              context.go('/dashboard');
             },
           ),
           DashboardSidebarItemView(
             icon: Icons.code_rounded,
             label: '채점 서비스 관리',
-            selected: selectedTab == DashboardNavTab.ojManage,
+            selected: currentTab == DashboardNavTab.ojManage,
             onTap: () {
               ref
                   .read(dashboardNavViewModelProvider.notifier)
                   .selectTab(DashboardNavTab.ojManage);
-              Navigator.maybePop(context);
+              closeDrawerIfOpen();
+              context.go('/dashboard');
             },
           ),
           const Spacer(),
@@ -122,11 +134,7 @@ class DashboardSidebarView extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {
-                    ref
-                        .read(authBlocProvider.notifier)
-                        .onEvent(const AuthLogoutRequested());
-                  },
+                  onPressed: () => performLogout(context, ref),
                   icon: const Icon(Icons.logout_rounded, size: 20),
                   color: const Color(0xFF8A8A8A),
                 ),
