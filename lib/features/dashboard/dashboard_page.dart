@@ -71,14 +71,16 @@ class DashboardShellPage extends ConsumerWidget {
 }
 
 class DashboardPage extends ConsumerWidget {
-  const DashboardPage({super.key});
+  const DashboardPage({super.key, this.selectedTab});
+
+  final DashboardNavTab? selectedTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedTab = ref.watch(dashboardNavViewModelProvider);
+    final currentTab = selectedTab ?? ref.watch(dashboardNavViewModelProvider);
 
     return DashboardBodyView(
-      selectedTab: selectedTab,
+      selectedTab: currentTab!,
       onLogout: () => performLogout(context, ref),
       isDesktop: true,
     );

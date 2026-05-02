@@ -268,8 +268,8 @@ class _AssignmentFormState extends State<_AssignmentForm> {
   late String _endAt;
   late String _status;
 
-  late List<String> _learningGoals;
-  late List<String> _requirements;
+  late List<_DynamicTextItem> _learningGoals;
+  late List<_DynamicTextItem> _requirements;
   late List<_TestCaseData> _testCases;
   late List<_CodeTemplateData> _codeTemplates;
 
@@ -309,19 +309,21 @@ class _AssignmentFormState extends State<_AssignmentForm> {
         : apiIsoToDatetimeLocalKst(assignment.endAt);
     _status = assignment?.status ?? 'DRAFT';
 
-    _learningGoals =
-        assignment?.metadata.learningGoals
-            .map((goal) => goal.learningGoalText)
-            .toList() ??
-        [''];
-    if (_learningGoals.isEmpty) _learningGoals.add('');
+    _learningGoals = _toDynamicTextItems(
+      assignment?.metadata.learningGoals
+              .map((goal) => goal.learningGoalText)
+              .toList() ??
+          [''],
+    );
+    if (_learningGoals.isEmpty) _learningGoals.add(_DynamicTextItem.empty());
 
-    _requirements =
-        assignment?.metadata.requirements
-            .map((requirement) => requirement.requirementText)
-            .toList() ??
-        [''];
-    if (_requirements.isEmpty) _requirements.add('');
+    _requirements = _toDynamicTextItems(
+      assignment?.metadata.requirements
+              .map((requirement) => requirement.requirementText)
+              .toList() ??
+          [''],
+    );
+    if (_requirements.isEmpty) _requirements.add(_DynamicTextItem.empty());
 
     _testCases =
         assignment?.metadata.testCases
@@ -350,6 +352,22 @@ class _AssignmentFormState extends State<_AssignmentForm> {
             .toList() ??
         [_CodeTemplateData()];
     if (_codeTemplates.isEmpty) _codeTemplates.add(_CodeTemplateData());
+  }
+
+  List<_DynamicTextItem> _toDynamicTextItems(List<String> values) {
+    return values.map(_DynamicTextItem.new).toList();
+  }
+
+  void _reorderDynamicTextItems(
+    List<_DynamicTextItem> items,
+    int oldIndex,
+    int newIndex,
+  ) {
+    setState(() {
+      final adjustedNewIndex = newIndex > oldIndex ? newIndex - 1 : newIndex;
+      final item = items.removeAt(oldIndex);
+      items.insert(adjustedNewIndex, item);
+    });
   }
 
   @override
@@ -467,10 +485,18 @@ class _AssignmentFormState extends State<_AssignmentForm> {
                     title: '학습 목표',
                     addLabel: '추가하기',
                     items: _learningGoals,
-                    onAdd: () => setState(() => _learningGoals.add('')),
+                    onAdd: () => setState(
+                      () => _learningGoals.add(_DynamicTextItem.empty()),
+                    ),
                     onRemove: (index) =>
                         setState(() => _learningGoals.removeAt(index)),
-                    onChanged: (index, value) => _learningGoals[index] = value,
+                    onChanged: (index, value) =>
+                        _learningGoals[index].value = value,
+                    onReorder: (oldIndex, newIndex) => _reorderDynamicTextItems(
+                      _learningGoals,
+                      oldIndex,
+                      newIndex,
+                    ),
                     placeholder: '학습 목표',
                     multiline: false,
                   ),
@@ -479,10 +505,18 @@ class _AssignmentFormState extends State<_AssignmentForm> {
                     title: '요구사항 (Requirements)',
                     addLabel: '추가하기',
                     items: _requirements,
-                    onAdd: () => setState(() => _requirements.add('')),
+                    onAdd: () => setState(
+                      () => _requirements.add(_DynamicTextItem.empty()),
+                    ),
                     onRemove: (index) =>
                         setState(() => _requirements.removeAt(index)),
-                    onChanged: (index, value) => _requirements[index] = value,
+                    onChanged: (index, value) =>
+                        _requirements[index].value = value,
+                    onReorder: (oldIndex, newIndex) => _reorderDynamicTextItems(
+                      _requirements,
+                      oldIndex,
+                      newIndex,
+                    ),
                     placeholder: '요구사항',
                     multiline: true,
                   ),
@@ -491,13 +525,15 @@ class _AssignmentFormState extends State<_AssignmentForm> {
                   const SizedBox(height: 12),
                   if (_isJsonMode)
                     _buildJsonMode()
-                  else
+                  else ...[
                     ..._testCases.asMap().entries.map(
                       (entry) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _buildTestCaseCard(entry.key, entry.value),
                       ),
                     ),
+                    _buildAddTestCaseButton(),
+                  ],
                   const SizedBox(height: 28),
                   _buildCodeTemplateHeader(),
                   const SizedBox(height: 12),
@@ -607,10 +643,11 @@ class _AssignmentFormState extends State<_AssignmentForm> {
   Widget _buildDynamicCard({
     required String title,
     required String addLabel,
-    required List<String> items,
+    required List<_DynamicTextItem> items,
     required VoidCallback onAdd,
     required ValueChanged<int> onRemove,
     required void Function(int index, String value) onChanged,
+    required void Function(int oldIndex, int newIndex) onReorder,
     required String placeholder,
     required bool multiline,
   }) {
@@ -622,58 +659,77 @@ class _AssignmentFormState extends State<_AssignmentForm> {
       ),
       child: Column(
         children: [
-          _CardHeader(
-            title: title,
-            trailing: _SmallOutlineButton(
-              icon: Icons.add_rounded,
-              label: addLabel,
-              onPressed: onAdd,
-            ),
-          ),
+          _CardHeader(title: title),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
-              children: items.asMap().entries.map((entry) {
-                final index = entry.key;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.only(top: 12, right: 8),
-                        child: Icon(
-                          Icons.drag_indicator,
-                          size: 16,
-                          color: _D.inputBorder,
-                        ),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  onReorder: onReorder,
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return Padding(
+                      key: ValueKey(item.id),
+                      padding: EdgeInsets.only(
+                        bottom: index == items.length - 1 ? 0 : 10,
                       ),
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: entry.value,
-                          decoration: _inputDeco(
-                            '$placeholder ${index + 1}',
-                            isTextarea: multiline,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ReorderableDragStartListener(
+                            index: index,
+                            child: const Padding(
+                              padding: EdgeInsets.only(top: 12, right: 8),
+                              child: Icon(
+                                Icons.drag_indicator,
+                                size: 16,
+                                color: _D.inputBorder,
+                              ),
+                            ),
                           ),
-                          keyboardType: TextInputType.multiline,
-                          minLines: multiline ? 3 : 1,
-                          maxLines: null,
-                          onChanged: (value) => onChanged(index, value),
-                        ),
+                          Expanded(
+                            child: TextFormField(
+                              key: ValueKey('field-${item.id}'),
+                              initialValue: item.value,
+                              decoration: _inputDeco(
+                                '$placeholder ${index + 1}',
+                                isTextarea: multiline,
+                              ),
+                              keyboardType: TextInputType.multiline,
+                              minLines: multiline ? 3 : 1,
+                              maxLines: null,
+                              onChanged: (value) => onChanged(index, value),
+                            ),
+                          ),
+                          if (items.length > 1)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.remove_circle_outline,
+                                size: 18,
+                                color: Colors.red,
+                              ),
+                              onPressed: () => onRemove(index),
+                            ),
+                        ],
                       ),
-                      if (items.length > 1)
-                        IconButton(
-                          icon: const Icon(
-                            Icons.remove_circle_outline,
-                            size: 18,
-                            color: Colors.red,
-                          ),
-                          onPressed: () => onRemove(index),
-                        ),
-                    ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _SmallOutlineButton(
+                    icon: Icons.add_rounded,
+                    label: addLabel,
+                    onPressed: onAdd,
                   ),
-                );
-              }).toList(),
+                ),
+              ],
             ),
           ),
         ],
@@ -716,14 +772,19 @@ class _AssignmentFormState extends State<_AssignmentForm> {
             icon: Icons.format_align_left_rounded,
             label: 'JSON 포맷팅',
             onPressed: _formatJson,
-          )
-        else
-          _SmallOutlineButton(
-            icon: Icons.add_rounded,
-            label: '테스트케이스 추가',
-            onPressed: () => setState(() => _testCases.add(_TestCaseData())),
           ),
       ],
+    );
+  }
+
+  Widget _buildAddTestCaseButton() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: _SmallOutlineButton(
+        icon: Icons.add_rounded,
+        label: '테스트케이스 추가',
+        onPressed: () => setState(() => _testCases.add(_TestCaseData())),
+      ),
     );
   }
 
@@ -1134,6 +1195,7 @@ class _AssignmentFormState extends State<_AssignmentForm> {
 
   AssignmentMetadata _buildMetadata() {
     final learningGoals = _learningGoals
+        .map((goal) => goal.value)
         .where((goal) => goal.trim().isNotEmpty)
         .toList()
         .asMap()
@@ -1147,6 +1209,7 @@ class _AssignmentFormState extends State<_AssignmentForm> {
         .toList();
 
     final requirements = _requirements
+        .map((requirement) => requirement.value)
         .where((requirement) => requirement.trim().isNotEmpty)
         .toList()
         .asMap()
@@ -1547,6 +1610,17 @@ class _DateTimePickerFieldState extends State<_DateTimePickerField> {
       ),
     );
   }
+}
+
+class _DynamicTextItem {
+  _DynamicTextItem(this.value) : id = _nextId++;
+
+  _DynamicTextItem.empty() : this('');
+
+  static int _nextId = 0;
+
+  final int id;
+  String value;
 }
 
 class _TestCaseData {

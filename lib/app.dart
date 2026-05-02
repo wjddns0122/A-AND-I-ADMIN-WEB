@@ -45,13 +45,14 @@ class _AdminAppState extends ConsumerState<AdminApp> {
         GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
         ShellRoute(
           builder: (context, state, child) => DashboardShellPage(
-            selectedTab: _selectedTabForPath(state.uri.path),
+            selectedTab: _selectedTabForUri(state.uri),
             child: child,
           ),
           routes: [
             GoRoute(
               path: '/dashboard',
-              builder: (context, state) => const DashboardPage(),
+              builder: (context, state) =>
+                  DashboardPage(selectedTab: _dashboardTabForUri(state.uri)),
             ),
             GoRoute(
               path: '/dashboard/courses/:courseSlug',
@@ -103,9 +104,18 @@ class _AdminAppState extends ConsumerState<AdminApp> {
   }
 }
 
-DashboardNavTab? _selectedTabForPath(String path) {
-  if (path.startsWith('/dashboard/courses')) {
+DashboardNavTab? _selectedTabForUri(Uri uri) {
+  if (uri.path.startsWith('/dashboard/courses')) {
     return DashboardNavTab.tasksManage;
   }
-  return null;
+  return _dashboardTabForUri(uri);
+}
+
+DashboardNavTab? _dashboardTabForUri(Uri uri) {
+  return switch (uri.queryParameters['tab']) {
+    'users' => DashboardNavTab.usersManage,
+    'tasks' => DashboardNavTab.tasksManage,
+    'oj' => DashboardNavTab.ojManage,
+    _ => null,
+  };
 }

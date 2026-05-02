@@ -14,13 +14,6 @@ class DashboardSidebarView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final currentTab = selectedTab ?? ref.watch(dashboardNavViewModelProvider);
 
-    void closeDrawerIfOpen() {
-      final scaffold = Scaffold.maybeOf(context);
-      if (scaffold?.isDrawerOpen ?? false) {
-        Navigator.of(context).pop();
-      }
-    }
-
     return Container(
       width: double.infinity,
       constraints: const BoxConstraints(maxWidth: 264),
@@ -66,37 +59,22 @@ class DashboardSidebarView extends ConsumerWidget {
             icon: Icons.group_rounded,
             label: '사용자 관리',
             selected: currentTab == DashboardNavTab.usersManage,
-            onTap: () {
-              ref
-                  .read(dashboardNavViewModelProvider.notifier)
-                  .selectTab(DashboardNavTab.usersManage);
-              closeDrawerIfOpen();
-              context.go('/dashboard');
-            },
+            onTap: () =>
+                _goToDashboardTab(context, ref, DashboardNavTab.usersManage),
           ),
           DashboardSidebarItemView(
             icon: Icons.add_task_rounded,
             label: '과제 추가',
             selected: currentTab == DashboardNavTab.tasksManage,
-            onTap: () {
-              ref
-                  .read(dashboardNavViewModelProvider.notifier)
-                  .selectTab(DashboardNavTab.tasksManage);
-              closeDrawerIfOpen();
-              context.go('/dashboard');
-            },
+            onTap: () =>
+                _goToDashboardTab(context, ref, DashboardNavTab.tasksManage),
           ),
           DashboardSidebarItemView(
             icon: Icons.code_rounded,
             label: '채점 서비스 관리',
             selected: currentTab == DashboardNavTab.ojManage,
-            onTap: () {
-              ref
-                  .read(dashboardNavViewModelProvider.notifier)
-                  .selectTab(DashboardNavTab.ojManage);
-              closeDrawerIfOpen();
-              context.go('/dashboard');
-            },
+            onTap: () =>
+                _goToDashboardTab(context, ref, DashboardNavTab.ojManage),
           ),
           const Spacer(),
           const Divider(height: 1, color: Color(0xFFF1F1F1)),
@@ -144,6 +122,19 @@ class DashboardSidebarView extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _goToDashboardTab(
+    BuildContext context,
+    WidgetRef ref,
+    DashboardNavTab tab,
+  ) {
+    ref.read(dashboardNavViewModelProvider.notifier).selectTab(tab);
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold?.isDrawerOpen ?? false) {
+      Navigator.of(context).pop();
+    }
+    context.go(dashboardLocationForTab(tab));
   }
 }
 

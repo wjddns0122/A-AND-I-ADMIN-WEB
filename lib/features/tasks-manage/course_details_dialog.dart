@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aandi_course_api/aandi_course_api.dart';
 import 'package:go_router/go_router.dart';
 
+import '../dashboard/dashboard_nav_view_model.dart';
 import 'task_management.dart';
 import 'views/enrollments_view.dart';
 import 'views/assignments_view.dart';
@@ -81,7 +82,7 @@ class _CourseDetailsPageState extends ConsumerState<CourseDetailsPage>
     ref.listen(tasksManagementBlocProvider, (prev, next) {
       if (prev?.isDeleting == true && next.isDeleting == false) {
         if (next.errorMessage == null) {
-          context.go('/dashboard');
+          context.go(dashboardLocationForTab(DashboardNavTab.tasksManage));
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(const SnackBar(content: Text('코스가 정상적으로 삭제되었습니다.')));
@@ -120,7 +121,9 @@ class _CourseDetailsPageState extends ConsumerState<CourseDetailsPage>
             isDeleting: state.isDeleting,
             onEditPressed: () => _showEditCourseDialog(context, ref, course),
             onDeletePressed: () => _showDeleteDialog(context, ref, course),
-            onClose: () => context.go('/dashboard'),
+            onClose: () => context.go(
+              dashboardLocationForTab(DashboardNavTab.tasksManage),
+            ),
           ),
           Expanded(
             child: TabBarView(
@@ -204,7 +207,9 @@ class _CourseDetailsPageState extends ConsumerState<CourseDetailsPage>
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: () => context.go('/dashboard'),
+              onPressed: () => context.go(
+                dashboardLocationForTab(DashboardNavTab.tasksManage),
+              ),
               icon: const Icon(Icons.arrow_back_rounded),
               label: const Text('과제 관리로 돌아가기'),
             ),
